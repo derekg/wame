@@ -563,7 +563,9 @@ let dragStartTime = 0;
 let dragStartX = 0;
 let dragStartY = 0;
 let dragGhost = null;
-let isTouchDrag = false; // Track if current drag is from touch
+let isTouchDrag = false;
+let isDragging = false; // True once we've actually started dragging (moved enough)
+let pendingDragPieceIndex = null; // Piece index waiting for drag to start
 
 function createDragGhost(piece) {
   const ghost = document.createElement('div');
@@ -601,7 +603,6 @@ function startDrag(e, pieceIndex) {
   if (gameState.gameOver || !gameState.pieces[pieceIndex]) return;
 
   e.preventDefault();
-  e.stopPropagation();
 
   // Track if this is a touch event
   isTouchDrag = !!e.touches;
@@ -616,23 +617,16 @@ function startDrag(e, pieceIndex) {
 
   const piece = gameState.pieces[pieceIndex];
   draggedPiece = { piece, index: pieceIndex };
+  pendingDragPieceIndex = pieceIndex;
+  isDragging = false; // Not dragging yet, just touched
 
-  gameState.selectedPieceIndex = pieceIndex;
-  renderPieces();
-
-  const pieceEl = trayEl.querySelector(`[data-index="${pieceIndex}"]`);
-  if (pieceEl) pieceEl.classList.add('dragging');
-
-  // Create floating ghost
-  dragGhost = createDragGhost(piece);
+  // Don't create ghost or change selection yet - wait for movement
 
   document.addEventListener('mousemove', onDrag);
   document.addEventListener('mouseup', endDrag);
   document.addEventListener('touchmove', onDrag, { passive: false });
   document.addEventListener('touchend', endDrag, { passive: false });
   document.addEventListener('touchcancel', cancelDrag, { passive: false });
-
-  onDrag(e);
 }
 
 function onDrag(e) {
@@ -643,10 +637,32 @@ function onDrag(e) {
   const clientX = e.touches ? e.touches[0].clientX : e.clientX;
   const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
-  // Move ghost to follow finger/cursor with offset above finger for visibility
+  // Calculate distance moved
+  const dragDistance = Math.sqrt(
+    Math.pow(clientX - dragStartX, 2) +
+    Math.pow(clientY - dragStartY, 2)
+  );
+
+  // Start actual dragging once moved enough (20px threshold)
+  if (!isDragging && dragDistance > 20) {
+    isDragging = true;
+
+    // Now select and show the ghost
+    gameState.selectedPieceIndex = pendingDragPieceIndex;
+    renderPieces();
+
+    const pieceEl = trayEl.querySelector(`[data-index="${pendingDragPieceIndex}"]`);
+    if (pieceEl) pieceEl.classList.add('dragging');
+
+    dragGhost = createDragGhost(draggedPiece.piece);
+  }
+
+  if (!isDragging) return; // Not dragging yet, don't update preview
+
+  // Move ghost to follow finger/cursor
   if (dragGhost) {
-    // For touch, offset more so finger doesn't cover the piece
-    const yOffset = isTouchDrag ? 60 : 40;
+    // Smaller offset so it's easier to reach bottom of board
+    const yOffset = isTouchDrag ? 40 : 30;
     dragGhost.style.left = clientX + 'px';
     dragGhost.style.top = (clientY - yOffset) + 'px';
   }
@@ -654,8 +670,8 @@ function onDrag(e) {
   const boardRect = boardEl.getBoundingClientRect();
   const cellSize = boardRect.width / GRID_SIZE;
 
-  // For touch, use the ghost position (offset above finger) for placement calculation
-  const targetY = isTouchDrag ? clientY - 60 : clientY;
+  // Use ghost position for placement calculation
+  const targetY = isTouchDrag ? clientY - 40 : clientY;
   const relX = clientX - boardRect.left;
   const relY = targetY - boardRect.top;
 
@@ -677,22 +693,22 @@ function endDrag(e) {
 
   e.preventDefault();
 
-  const dragDuration = Date.now() - dragStartTime;
-
   const clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
   const clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
 
-  // Calculate distance moved
-  const dragDistance = Math.sqrt(
-    Math.pow(clientX - dragStartX, 2) +
-    Math.pow(clientY - dragStartY, 2)
-  );
+  // If we never started actually dragging, it's a tap
+  if (!isDragging) {
+    const pieceIndex = draggedPiece.index;
+    cleanupDrag();
+    handlePieceTap(pieceIndex);
+    return;
+  }
 
+  // It's a drag - try to place the piece
   const boardRect = boardEl.getBoundingClientRect();
   const cellSize = boardRect.width / GRID_SIZE;
 
-  // For touch, use the ghost position (offset above finger) for placement calculation
-  const targetY = isTouchDrag ? clientY - 60 : clientY;
+  const targetY = isTouchDrag ? clientY - 40 : clientY;
   const relX = clientX - boardRect.left;
   const relY = targetY - boardRect.top;
 
@@ -702,26 +718,6 @@ function endDrag(e) {
   const startRow = row - Math.floor(draggedPiece.piece.height / 2);
   const startCol = col - Math.floor(draggedPiece.piece.width / 2);
 
-  // Check if this was a tap (not a drag) - use both time AND distance
-  // For touch: more lenient time (250ms) but require minimal movement (15px)
-  // For mouse: shorter time (150ms) and minimal movement (10px)
-  const maxTapTime = isTouchDrag ? 250 : 150;
-  const maxTapDistance = isTouchDrag ? 15 : 10;
-  const isTap = dragDuration <= maxTapTime && dragDistance <= maxTapDistance;
-
-  if (isTap) {
-    // It's a tap - handle selection/rotation
-    const pieceIndex = draggedPiece.index;
-
-    // Clean up drag state first
-    cleanupDrag();
-
-    // Now handle the tap
-    handlePieceTap(pieceIndex);
-    return;
-  }
-
-  // It's a drag - try to place the piece
   if (canPlacePiece(draggedPiece.piece, startRow, startCol)) {
     placePiece(draggedPiece.piece, startRow, startCol, draggedPiece.index);
     gameState.selectedPieceIndex = null;
@@ -755,6 +751,8 @@ function cleanupDrag() {
 
   draggedPiece = null;
   isTouchDrag = false;
+  isDragging = false;
+  pendingDragPieceIndex = null;
 
   // Remove all event listeners
   document.removeEventListener('mousemove', onDrag);
@@ -762,6 +760,9 @@ function cleanupDrag() {
   document.removeEventListener('touchmove', onDrag);
   document.removeEventListener('touchend', endDrag);
   document.removeEventListener('touchcancel', cancelDrag);
+
+  // Clean up any stale ghosts
+  document.querySelectorAll('.drag-ghost').forEach(g => g.remove());
 }
 
 function clearPreview() {
