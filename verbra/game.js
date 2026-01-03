@@ -415,7 +415,25 @@ function renderBoard() {
         }
       }
 
-      cell.addEventListener('click', () => handleCellClick(row, col));
+      // Track touch for ghost click prevention
+      let cellLastTouch = 0;
+
+      cell.addEventListener('click', (e) => {
+        // Prevent ghost clicks after touch
+        if (Date.now() - cellLastTouch < 500) return;
+        handleCellClick(row, col);
+      });
+
+      // Touch handler for cells
+      cell.addEventListener('touchend', (e) => {
+        cellLastTouch = Date.now();
+        e.preventDefault();
+        // Only handle if we have a selected piece and this isn't during a drag
+        if (gameState.selectedPieceIndex !== null && !draggedPiece) {
+          handleCellClick(row, col);
+        }
+      }, { passive: false });
+
       boardEl.appendChild(cell);
     }
   }
@@ -464,15 +482,33 @@ function renderPieces() {
       }
     }
 
-    // Tap to select/rotate
+    // Track touch events to prevent ghost clicks
+    let lastTouchTime = 0;
+
+    // Tap to select/rotate (mouse only - touch is handled via touchstart/touchend)
     pieceEl.addEventListener('click', (e) => {
       e.stopPropagation();
+      // Prevent ghost clicks after touch events (within 500ms)
+      if (Date.now() - lastTouchTime < 500) {
+        return;
+      }
       handlePieceTap(index);
     });
 
-    // Drag
-    pieceEl.addEventListener('mousedown', (e) => startDrag(e, index));
-    pieceEl.addEventListener('touchstart', (e) => startDrag(e, index), { passive: false });
+    // Mouse drag
+    pieceEl.addEventListener('mousedown', (e) => {
+      // Ignore if this is a touch device click
+      if (Date.now() - lastTouchTime < 500) {
+        return;
+      }
+      startDrag(e, index);
+    });
+
+    // Touch drag - mark touch time to prevent ghost clicks
+    pieceEl.addEventListener('touchstart', (e) => {
+      lastTouchTime = Date.now();
+      startDrag(e, index);
+    }, { passive: false });
 
     trayEl.appendChild(pieceEl);
   });
@@ -524,7 +560,10 @@ function handleCellClick(row, col) {
 // Drag handling
 let draggedPiece = null;
 let dragStartTime = 0;
+let dragStartX = 0;
+let dragStartY = 0;
 let dragGhost = null;
+let isTouchDrag = false; // Track if current drag is from touch
 
 function createDragGhost(piece) {
   const ghost = document.createElement('div');
@@ -562,7 +601,18 @@ function startDrag(e, pieceIndex) {
   if (gameState.gameOver || !gameState.pieces[pieceIndex]) return;
 
   e.preventDefault();
+  e.stopPropagation();
+
+  // Track if this is a touch event
+  isTouchDrag = !!e.touches;
+
   dragStartTime = Date.now();
+
+  // Get initial position
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  dragStartX = clientX;
+  dragStartY = clientY;
 
   const piece = gameState.pieces[pieceIndex];
   draggedPiece = { piece, index: pieceIndex };
@@ -579,7 +629,8 @@ function startDrag(e, pieceIndex) {
   document.addEventListener('mousemove', onDrag);
   document.addEventListener('mouseup', endDrag);
   document.addEventListener('touchmove', onDrag, { passive: false });
-  document.addEventListener('touchend', endDrag);
+  document.addEventListener('touchend', endDrag, { passive: false });
+  document.addEventListener('touchcancel', cancelDrag, { passive: false });
 
   onDrag(e);
 }
@@ -592,17 +643,21 @@ function onDrag(e) {
   const clientX = e.touches ? e.touches[0].clientX : e.clientX;
   const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
-  // Move ghost to follow finger/cursor
+  // Move ghost to follow finger/cursor with offset above finger for visibility
   if (dragGhost) {
+    // For touch, offset more so finger doesn't cover the piece
+    const yOffset = isTouchDrag ? 60 : 40;
     dragGhost.style.left = clientX + 'px';
-    dragGhost.style.top = (clientY - 40) + 'px'; // Offset so user can see where placing
+    dragGhost.style.top = (clientY - yOffset) + 'px';
   }
 
   const boardRect = boardEl.getBoundingClientRect();
   const cellSize = boardRect.width / GRID_SIZE;
 
+  // For touch, use the ghost position (offset above finger) for placement calculation
+  const targetY = isTouchDrag ? clientY - 60 : clientY;
   const relX = clientX - boardRect.left;
-  const relY = clientY - boardRect.top;
+  const relY = targetY - boardRect.top;
 
   const col = Math.floor(relX / cellSize);
   const row = Math.floor(relY / cellSize);
@@ -620,16 +675,26 @@ function onDrag(e) {
 function endDrag(e) {
   if (!draggedPiece) return;
 
+  e.preventDefault();
+
   const dragDuration = Date.now() - dragStartTime;
 
   const clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
   const clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
 
+  // Calculate distance moved
+  const dragDistance = Math.sqrt(
+    Math.pow(clientX - dragStartX, 2) +
+    Math.pow(clientY - dragStartY, 2)
+  );
+
   const boardRect = boardEl.getBoundingClientRect();
   const cellSize = boardRect.width / GRID_SIZE;
 
+  // For touch, use the ghost position (offset above finger) for placement calculation
+  const targetY = isTouchDrag ? clientY - 60 : clientY;
   const relX = clientX - boardRect.left;
-  const relY = clientY - boardRect.top;
+  const relY = targetY - boardRect.top;
 
   const col = Math.floor(relX / cellSize);
   const row = Math.floor(relY / cellSize);
@@ -637,24 +702,19 @@ function endDrag(e) {
   const startRow = row - Math.floor(draggedPiece.piece.height / 2);
   const startCol = col - Math.floor(draggedPiece.piece.width / 2);
 
-  // Check if this was a tap (not a drag)
-  if (dragDuration <= 150) {
+  // Check if this was a tap (not a drag) - use both time AND distance
+  // For touch: more lenient time (250ms) but require minimal movement (15px)
+  // For mouse: shorter time (150ms) and minimal movement (10px)
+  const maxTapTime = isTouchDrag ? 250 : 150;
+  const maxTapDistance = isTouchDrag ? 15 : 10;
+  const isTap = dragDuration <= maxTapTime && dragDistance <= maxTapDistance;
+
+  if (isTap) {
     // It's a tap - handle selection/rotation
     const pieceIndex = draggedPiece.index;
 
     // Clean up drag state first
-    if (dragGhost) {
-      dragGhost.remove();
-      dragGhost = null;
-    }
-    const pieceEl = trayEl.querySelector(`[data-index="${draggedPiece.index}"]`);
-    if (pieceEl) pieceEl.classList.remove('dragging');
-    draggedPiece = null;
-
-    document.removeEventListener('mousemove', onDrag);
-    document.removeEventListener('mouseup', endDrag);
-    document.removeEventListener('touchmove', onDrag);
-    document.removeEventListener('touchend', endDrag);
+    cleanupDrag();
 
     // Now handle the tap
     handlePieceTap(pieceIndex);
@@ -668,28 +728,57 @@ function endDrag(e) {
   }
 
   clearPreview();
+  cleanupDrag();
+}
 
+// Cancel drag (e.g., touchcancel event)
+function cancelDrag(e) {
+  if (!draggedPiece) return;
+  e.preventDefault();
+  clearPreview();
+  cleanupDrag();
+}
+
+// Clean up all drag state and event listeners
+function cleanupDrag() {
   // Remove drag ghost
   if (dragGhost) {
     dragGhost.remove();
     dragGhost = null;
   }
 
-  const pieceEl = trayEl.querySelector(`[data-index="${draggedPiece.index}"]`);
-  if (pieceEl) pieceEl.classList.remove('dragging');
+  // Remove dragging class from piece
+  if (draggedPiece) {
+    const pieceEl = trayEl.querySelector(`[data-index="${draggedPiece.index}"]`);
+    if (pieceEl) pieceEl.classList.remove('dragging');
+  }
 
   draggedPiece = null;
+  isTouchDrag = false;
 
+  // Remove all event listeners
   document.removeEventListener('mousemove', onDrag);
   document.removeEventListener('mouseup', endDrag);
   document.removeEventListener('touchmove', onDrag);
   document.removeEventListener('touchend', endDrag);
+  document.removeEventListener('touchcancel', cancelDrag);
 }
 
 function clearPreview() {
-  document.querySelectorAll('.cell.preview, .cell.invalid-preview, .cell.preview-letter').forEach(cell => {
+  // Clear all preview-related classes and content from cells
+  document.querySelectorAll('.cell').forEach(cell => {
     cell.classList.remove('preview', 'invalid-preview', 'preview-letter');
-    if (!cell.classList.contains('filled')) cell.textContent = '';
+    // Clear text content for non-filled cells
+    if (!cell.classList.contains('filled')) {
+      cell.textContent = '';
+    }
+  });
+
+  // Also remove any stale drag ghosts that might be lingering
+  document.querySelectorAll('.drag-ghost').forEach(ghost => {
+    if (ghost !== dragGhost) {
+      ghost.remove();
+    }
   });
 }
 
@@ -1232,7 +1321,13 @@ modalBtn.addEventListener('click', initGame);
 helpBtn.addEventListener('click', () => helpModal.classList.add('show'));
 helpCloseBtn.addEventListener('click', () => helpModal.classList.remove('show'));
 
+// Track last touch for ghost click prevention
+let globalLastTouch = 0;
+
 document.addEventListener('click', (e) => {
+  // Prevent ghost clicks after touch
+  if (Date.now() - globalLastTouch < 500) return;
+
   if (!e.target.closest('.piece') && !e.target.closest('.cell') && !e.target.closest('.modal-content')) {
     gameState.selectedPieceIndex = null;
     renderPieces();
@@ -1240,13 +1335,48 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// Prevent double-tap zoom
+// Touch handler for deselection
+document.addEventListener('touchstart', (e) => {
+  globalLastTouch = Date.now();
+
+  // Deselect if tapping outside pieces/cells/modals (only on touchstart to avoid conflicts with drag)
+  if (!e.target.closest('.piece') && !e.target.closest('.cell') && !e.target.closest('.modal-content') && !e.target.closest('.modal')) {
+    // Delay to not interfere with other touch handlers
+    setTimeout(() => {
+      if (!draggedPiece && gameState.selectedPieceIndex !== null) {
+        gameState.selectedPieceIndex = null;
+        renderPieces();
+        clearPreview();
+      }
+    }, 0);
+  }
+}, { passive: true });
+
+// Prevent double-tap zoom on the game area
 let lastTouchEnd = 0;
 document.addEventListener('touchend', (e) => {
   const now = Date.now();
-  if (now - lastTouchEnd < 300) e.preventDefault();
+  if (now - lastTouchEnd < 300) {
+    e.preventDefault();
+  }
   lastTouchEnd = now;
 }, { passive: false });
+
+// Clean up drag state when page visibility changes (e.g., switching apps)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && draggedPiece) {
+    clearPreview();
+    cleanupDrag();
+  }
+});
+
+// Clean up on window blur (e.g., notifications)
+window.addEventListener('blur', () => {
+  if (draggedPiece) {
+    clearPreview();
+    cleanupDrag();
+  }
+});
 
 // Start
 initGame();
