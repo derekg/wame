@@ -12,7 +12,9 @@ const gameState = {
   won: false,
   selectedPieceIndex: null,
   linesCleared: 0,
-  combo: 0
+  combo: 0,
+  score: 0,
+  streak: 0  // Consecutive line clears
 };
 
 // DOM Elements
@@ -32,6 +34,7 @@ const modalBtn = document.getElementById('modal-btn');
 const helpBtn = document.getElementById('help-btn');
 const helpModal = document.getElementById('help-modal');
 const helpCloseBtn = document.getElementById('help-close-btn');
+const scoreEl = document.getElementById('score');
 
 // Confetti system
 const confettiCtx = confettiCanvas.getContext('2d');
@@ -144,6 +147,9 @@ function initGame() {
   gameState.selectedPieceIndex = null;
   gameState.linesCleared = 0;
   gameState.combo = 0;
+  gameState.score = 0;
+  gameState.streak = 0;
+  scoreEl.textContent = '0';
 
   renderBoard();
   renderPieces();
@@ -196,6 +202,33 @@ function updateProgress() {
   const captured = gameState.captured.filter(c => c).length;
   const percent = (captured / gameState.mysteryWord.length) * 100;
   progressFill.style.width = percent + '%';
+}
+
+function addScore(points) {
+  gameState.score += points;
+  scoreEl.textContent = gameState.score;
+  scoreEl.classList.add('bump');
+  setTimeout(() => scoreEl.classList.remove('bump'), 300);
+}
+
+function calculateLineScore(linesCleared, lettersCapt) {
+  // Base points: 100 per line
+  let points = linesCleared * 100;
+
+  // Combo multiplier (multiple lines at once)
+  if (linesCleared > 1) {
+    points *= linesCleared; // 2 lines = 2x, 3 lines = 3x, etc.
+  }
+
+  // Streak bonus (consecutive turns with line clears)
+  if (gameState.streak > 0) {
+    points += gameState.streak * 25;
+  }
+
+  // Bonus for capturing letters
+  points += lettersCapt * 50;
+
+  return points;
 }
 
 // Render game board
@@ -328,6 +361,39 @@ function handleCellClick(row, col) {
 // Drag handling
 let draggedPiece = null;
 let dragStartTime = 0;
+let dragGhost = null;
+
+function createDragGhost(piece) {
+  const ghost = document.createElement('div');
+  ghost.className = 'drag-ghost';
+  ghost.style.gridTemplateColumns = `repeat(${piece.width}, 32px)`;
+  ghost.style.gridTemplateRows = `repeat(${piece.height}, 32px)`;
+  ghost.style.display = 'grid';
+  ghost.style.gap = '2px';
+
+  for (let row = 0; row < piece.height; row++) {
+    for (let col = 0; col < piece.width; col++) {
+      const cellEl = document.createElement('div');
+      cellEl.className = 'piece-cell';
+
+      const cellIndex = piece.cells.findIndex(c => c[0] === row && c[1] === col);
+      if (cellIndex !== -1) {
+        const letter = piece.letters[cellIndex];
+        cellEl.textContent = letter;
+        if (isLetterNeeded(letter)) {
+          cellEl.classList.add('needed');
+        }
+      } else {
+        cellEl.classList.add('empty');
+      }
+
+      ghost.appendChild(cellEl);
+    }
+  }
+
+  document.body.appendChild(ghost);
+  return ghost;
+}
 
 function startDrag(e, pieceIndex) {
   if (gameState.gameOver || !gameState.pieces[pieceIndex]) return;
@@ -344,6 +410,9 @@ function startDrag(e, pieceIndex) {
   const pieceEl = trayEl.querySelector(`[data-index="${pieceIndex}"]`);
   if (pieceEl) pieceEl.classList.add('dragging');
 
+  // Create floating ghost
+  dragGhost = createDragGhost(piece);
+
   document.addEventListener('mousemove', onDrag);
   document.addEventListener('mouseup', endDrag);
   document.addEventListener('touchmove', onDrag, { passive: false });
@@ -359,6 +428,12 @@ function onDrag(e) {
 
   const clientX = e.touches ? e.touches[0].clientX : e.clientX;
   const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+  // Move ghost to follow finger/cursor
+  if (dragGhost) {
+    dragGhost.style.left = clientX + 'px';
+    dragGhost.style.top = (clientY - 40) + 'px'; // Offset so user can see where placing
+  }
 
   const boardRect = boardEl.getBoundingClientRect();
   const cellSize = boardRect.width / GRID_SIZE;
@@ -406,6 +481,12 @@ function endDrag(e) {
   }
 
   clearPreview();
+
+  // Remove drag ghost
+  if (dragGhost) {
+    dragGhost.remove();
+    dragGhost = null;
+  }
 
   const pieceEl = trayEl.querySelector(`[data-index="${draggedPiece.index}"]`);
   if (pieceEl) pieceEl.classList.remove('dragging');
@@ -538,6 +619,7 @@ function checkLines() {
     });
 
     gameState.linesCleared += totalLines;
+    gameState.streak++;
 
     // Screen shake for combo
     if (totalLines > 1) {
@@ -558,14 +640,18 @@ function checkLines() {
       }
     });
 
+    // Calculate and add score
+    const points = calculateLineScore(totalLines, lettersToCapture.length);
+    addScore(points);
+
     // Show message
     if (totalLines > 1) {
-      showFlash(`${totalLines}x COMBO!`, true);
+      showFlash(`${totalLines}x COMBO! +${points}`, true);
       if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
     } else if (lettersToCapture.length > 0) {
-      showFlash(`+${lettersToCapture.length} Letter${lettersToCapture.length > 1 ? 's' : ''}!`);
+      showFlash(`+${points}`);
     } else {
-      showFlash('Cleared!');
+      showFlash(`+${points}`);
     }
 
     // Particles
@@ -618,6 +704,8 @@ function checkLines() {
 
     }, 450);
   } else {
+    // Reset streak when no lines cleared
+    gameState.streak = 0;
     checkRefillPieces();
   }
 }
@@ -707,6 +795,10 @@ function showWin() {
       <div class="modal-stat-label">Word</div>
     </div>
     <div class="modal-stat">
+      <div class="modal-stat-value">${gameState.score}</div>
+      <div class="modal-stat-label">Score</div>
+    </div>
+    <div class="modal-stat">
       <div class="modal-stat-value">${gameState.linesCleared}</div>
       <div class="modal-stat-label">Lines</div>
     </div>
@@ -722,6 +814,10 @@ function showLose() {
     <div class="modal-stat">
       <div class="modal-stat-value">${found}/${gameState.mysteryWord.length}</div>
       <div class="modal-stat-label">Letters</div>
+    </div>
+    <div class="modal-stat">
+      <div class="modal-stat-value">${gameState.score}</div>
+      <div class="modal-stat-label">Score</div>
     </div>
     <div class="modal-stat">
       <div class="modal-stat-value">${gameState.linesCleared}</div>
