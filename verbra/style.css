@@ -233,6 +233,13 @@ header h1 {
   font-weight: 600;
 }
 
+.needed-letters span.hint {
+  background: var(--text);
+  color: #fff;
+  font-style: italic;
+  padding: 4px 12px;
+}
+
 /* Game Board */
 .board-section {
   flex: 1;

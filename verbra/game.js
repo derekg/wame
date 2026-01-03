@@ -68,6 +68,7 @@ const gameState = {
   mysteryWord: '',
   captured: [],
   revealed: [],  // Which letter positions have been revealed
+  hint: null,    // Category hint for the word
   pieces: [],
   gameOver: false,
   won: false,
@@ -189,12 +190,22 @@ function initGame(continueLevel = false) {
   gameState.mysteryWord = getWordForLevel(gameState.difficulty).toUpperCase();
   gameState.captured = Array(gameState.mysteryWord.length).fill(false);
 
+  // Progressive reveal based on level:
   // Levels 1-2: all letters revealed (training)
-  // Levels 3+: letters hidden until captured
+  // Levels 3-4: vowels pre-revealed
+  // Levels 5+: nothing revealed (full mystery), show hint if available
+  const VOWELS = ['A', 'E', 'I', 'O', 'U'];
   if (gameState.level <= 2) {
     gameState.revealed = Array(gameState.mysteryWord.length).fill(true);
+    gameState.hint = null;
+  } else if (gameState.level <= 4) {
+    // Reveal only vowels
+    gameState.revealed = gameState.mysteryWord.split('').map(letter => VOWELS.includes(letter));
+    gameState.hint = null;
   } else {
+    // Level 5+: full mystery mode with hint
     gameState.revealed = Array(gameState.mysteryWord.length).fill(false);
+    gameState.hint = getWordHint(gameState.mysteryWord);
   }
 
   setMysteryWord(gameState.mysteryWord);
@@ -271,8 +282,12 @@ function renderMysteryWord() {
   const revealedCount = gameState.revealed.filter(r => r).length;
 
   if (revealedCount === 0) {
-    // Nothing revealed yet - show word length hint
-    neededLettersEl.innerHTML = `<span>${gameState.mysteryWord.length} letters</span>`;
+    // Nothing revealed yet - show hint or word length
+    if (gameState.hint) {
+      neededLettersEl.innerHTML = `<span class="hint">${gameState.hint}</span>`;
+    } else {
+      neededLettersEl.innerHTML = `<span>${gameState.mysteryWord.length} letters</span>`;
+    }
   } else if (needed.length > 0) {
     neededLettersEl.innerHTML = 'Need: ' + needed.map(l => `<span>${l}</span>`).join('');
   } else {
