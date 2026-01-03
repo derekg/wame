@@ -14,7 +14,9 @@ const gameState = {
   linesCleared: 0,
   combo: 0,
   score: 0,
-  streak: 0  // Consecutive line clears
+  streak: 0,  // Consecutive line clears
+  movesRemaining: 0,
+  maxMoves: 0
 };
 
 // DOM Elements
@@ -35,6 +37,7 @@ const helpBtn = document.getElementById('help-btn');
 const helpModal = document.getElementById('help-modal');
 const helpCloseBtn = document.getElementById('help-close-btn');
 const scoreEl = document.getElementById('score');
+const movesEl = document.getElementById('moves');
 
 // Confetti system
 const confettiCtx = confettiCanvas.getContext('2d');
@@ -149,7 +152,13 @@ function initGame() {
   gameState.combo = 0;
   gameState.score = 0;
   gameState.streak = 0;
+
+  // Set moves based on word length: 5 letters = 20 moves, 6 = 23, 7 = 26
+  gameState.maxMoves = 17 + (gameState.mysteryWord.length * 1);
+  gameState.movesRemaining = gameState.maxMoves;
+
   scoreEl.textContent = '0';
+  updateMovesDisplay();
 
   renderBoard();
   renderPieces();
@@ -209,6 +218,72 @@ function addScore(points) {
   scoreEl.textContent = gameState.score;
   scoreEl.classList.add('bump');
   setTimeout(() => scoreEl.classList.remove('bump'), 300);
+}
+
+function updateMovesDisplay() {
+  movesEl.textContent = gameState.movesRemaining;
+
+  // Remove previous state classes
+  movesEl.classList.remove('warning', 'danger', 'bump');
+
+  // Add warning/danger states
+  if (gameState.movesRemaining <= 3) {
+    movesEl.classList.add('danger');
+  } else if (gameState.movesRemaining <= 6) {
+    movesEl.classList.add('warning');
+  }
+}
+
+function useMove() {
+  gameState.movesRemaining--;
+  movesEl.classList.add('bump');
+  setTimeout(() => movesEl.classList.remove('bump'), 300);
+  updateMovesDisplay();
+}
+
+// Apply gravity - blocks fall down to fill gaps
+function applyGravity() {
+  let blocksMoved = false;
+
+  // Process each column
+  for (let col = 0; col < GRID_SIZE; col++) {
+    // Start from bottom, move up
+    let writeRow = GRID_SIZE - 1;
+
+    for (let row = GRID_SIZE - 1; row >= 0; row--) {
+      if (gameState.grid[row][col].filled) {
+        if (row !== writeRow) {
+          // Move this cell down
+          gameState.grid[writeRow][col] = { ...gameState.grid[row][col] };
+          gameState.grid[row][col] = { letter: null, filled: false };
+          blocksMoved = true;
+        }
+        writeRow--;
+      }
+    }
+  }
+
+  return blocksMoved;
+}
+
+// Check for complete lines (used for chain reactions)
+function findCompleteLines() {
+  const rowsToClear = [];
+  const colsToClear = [];
+
+  for (let row = 0; row < GRID_SIZE; row++) {
+    if (gameState.grid[row].every(cell => cell.filled)) {
+      rowsToClear.push(row);
+    }
+  }
+
+  for (let col = 0; col < GRID_SIZE; col++) {
+    if (gameState.grid.every(row => row[col].filled)) {
+      colsToClear.push(col);
+    }
+  }
+
+  return { rowsToClear, colsToClear };
 }
 
 function calculateLineScore(linesCleared, lettersCapt) {
@@ -580,6 +655,9 @@ function placePiece(piece, startRow, startCol, pieceIndex) {
 
   gameState.pieces[pieceIndex] = null;
 
+  // Use a move
+  useMove();
+
   // Haptic
   if (navigator.vibrate) navigator.vibrate(30);
 
@@ -710,7 +788,16 @@ function checkLines() {
       });
       updateNeededLetters(gameState.captured);
 
+      // Apply gravity - blocks fall down
+      const blocksMoved = applyGravity();
       renderBoard();
+
+      // Add falling animation class to cells that moved
+      if (blocksMoved) {
+        document.querySelectorAll('.cell.filled').forEach(cell => {
+          cell.classList.add('new');
+        });
+      }
 
       setTimeout(() => {
         renderMysteryWord();
@@ -723,7 +810,12 @@ function checkLines() {
           return;
         }
 
-        checkRefillPieces();
+        // Check for chain reactions after gravity
+        if (blocksMoved) {
+          setTimeout(() => checkChainReaction(), 200);
+        } else {
+          checkRefillPieces();
+        }
       }, lettersToCapture.length * 120 + 150);
 
     }, 450);
@@ -732,6 +824,128 @@ function checkLines() {
     gameState.streak = 0;
     checkRefillPieces();
   }
+}
+
+// Handle chain reactions after gravity
+function checkChainReaction() {
+  const { rowsToClear, colsToClear } = findCompleteLines();
+
+  if (rowsToClear.length === 0 && colsToClear.length === 0) {
+    checkRefillPieces();
+    return;
+  }
+
+  const totalLines = rowsToClear.length + colsToClear.length;
+  gameState.linesCleared += totalLines;
+
+  // Collect letters from cleared cells
+  const clearedLetters = [];
+  const clearedPositions = new Set();
+
+  rowsToClear.forEach(row => {
+    for (let col = 0; col < GRID_SIZE; col++) {
+      const key = `${row}-${col}`;
+      if (!clearedPositions.has(key)) {
+        const letter = gameState.grid[row][col].letter;
+        const cell = boardEl.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+        clearedLetters.push({ letter, cell, row, col });
+        clearedPositions.add(key);
+        if (cell) cell.classList.add('clearing');
+      }
+    }
+  });
+
+  colsToClear.forEach(col => {
+    for (let row = 0; row < GRID_SIZE; row++) {
+      const key = `${row}-${col}`;
+      if (!clearedPositions.has(key)) {
+        const letter = gameState.grid[row][col].letter;
+        const cell = boardEl.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+        clearedLetters.push({ letter, cell, row, col });
+        clearedPositions.add(key);
+        if (cell) cell.classList.add('clearing');
+      }
+    }
+  });
+
+  // Find captures
+  const lettersToCapture = [];
+  clearedLetters.forEach(({ letter, cell }) => {
+    for (let i = 0; i < gameState.mysteryWord.length; i++) {
+      if (!gameState.captured[i] && gameState.mysteryWord[i] === letter) {
+        if (!lettersToCapture.some(c => c.slotIndex === i)) {
+          lettersToCapture.push({ letter, cell, slotIndex: i });
+          break;
+        }
+      }
+    }
+  });
+
+  // Chain bonus!
+  const points = calculateLineScore(totalLines, lettersToCapture.length) * 2; // Double points for chains
+  addScore(points);
+  showFlash(`CHAIN! +${points}`, true);
+
+  if (navigator.vibrate) navigator.vibrate([30, 20, 30, 20, 50]);
+  boardEl.classList.add('shake');
+  setTimeout(() => boardEl.classList.remove('shake'), 400);
+
+  // Particles
+  clearedLetters.forEach(({ cell }) => {
+    if (cell) {
+      const rect = cell.getBoundingClientRect();
+      createParticles(rect.left + rect.width / 2, rect.top + rect.height / 2, 8, '#f59e0b');
+    }
+  });
+
+  setTimeout(() => {
+    // Clear grid
+    rowsToClear.forEach(row => {
+      for (let col = 0; col < GRID_SIZE; col++) {
+        gameState.grid[row][col] = { letter: null, filled: false };
+      }
+    });
+    colsToClear.forEach(col => {
+      for (let row = 0; row < GRID_SIZE; row++) {
+        gameState.grid[row][col] = { letter: null, filled: false };
+      }
+    });
+
+    // Animate captures
+    lettersToCapture.forEach(({ letter, cell, slotIndex }, index) => {
+      setTimeout(() => animateCapture(letter, cell, slotIndex), index * 120);
+    });
+
+    // Update state
+    lettersToCapture.forEach(({ slotIndex }) => {
+      gameState.captured[slotIndex] = true;
+    });
+    updateNeededLetters(gameState.captured);
+
+    // Apply gravity again
+    const blocksMoved = applyGravity();
+    renderBoard();
+
+    setTimeout(() => {
+      renderMysteryWord();
+      updateProgress();
+
+      if (gameState.captured.every(c => c)) {
+        gameState.won = true;
+        gameState.gameOver = true;
+        setTimeout(showWin, 400);
+        return;
+      }
+
+      // Check for more chains
+      if (blocksMoved) {
+        setTimeout(() => checkChainReaction(), 200);
+      } else {
+        checkRefillPieces();
+      }
+    }, lettersToCapture.length * 120 + 150);
+
+  }, 400);
 }
 
 function animateCapture(letter, fromCell, toSlotIndex) {
@@ -786,6 +1000,13 @@ function checkRefillPieces() {
 function checkGameOver() {
   if (gameState.gameOver) return;
 
+  // Check if out of moves
+  if (gameState.movesRemaining <= 0) {
+    gameState.gameOver = true;
+    setTimeout(() => showLose('out_of_moves'), 300);
+    return;
+  }
+
   const remainingPieces = gameState.pieces.filter(p => p !== null);
 
   for (const piece of remainingPieces) {
@@ -804,7 +1025,7 @@ function checkGameOver() {
   }
 
   gameState.gameOver = true;
-  setTimeout(showLose, 300);
+  setTimeout(() => showLose('no_space'), 300);
 }
 
 function showWin() {
@@ -830,10 +1051,17 @@ function showWin() {
   showModal();
 }
 
-function showLose() {
+function showLose(reason = 'no_space') {
   const found = gameState.captured.filter(c => c).length;
-  modalTitle.textContent = 'Game Over';
-  modalMessage.textContent = `The word was "${gameState.mysteryWord}"`;
+
+  if (reason === 'out_of_moves') {
+    modalTitle.textContent = 'Out of Moves!';
+    modalMessage.textContent = `The word was "${gameState.mysteryWord}"`;
+  } else {
+    modalTitle.textContent = 'No Space Left!';
+    modalMessage.textContent = `The word was "${gameState.mysteryWord}"`;
+  }
+
   modalStats.innerHTML = `
     <div class="modal-stat">
       <div class="modal-stat-value">${found}/${gameState.mysteryWord.length}</div>

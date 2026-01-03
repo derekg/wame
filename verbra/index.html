@@ -12,9 +12,15 @@
   <div class="game-container">
     <header>
       <h1>VERBRA</h1>
-      <div class="score-display">
-        <span class="score-value" id="score">0</span>
-        <span class="score-label">SCORE</span>
+      <div class="stats-row">
+        <div class="stat-display">
+          <span class="stat-value" id="moves">20</span>
+          <span class="stat-label">MOVES</span>
+        </div>
+        <div class="stat-display">
+          <span class="stat-value" id="score">0</span>
+          <span class="stat-label">SCORE</span>
+        </div>
       </div>
       <button class="help-btn" id="help-btn">?</button>
     </header>
@@ -61,7 +67,7 @@
         <div class="help-steps">
           <div class="help-step">
             <span class="step-num">1</span>
-            <span>Drag blocks onto the grid</span>
+            <span>Drag blocks onto the grid (limited moves!)</span>
           </div>
           <div class="help-step">
             <span class="step-num">2</span>
@@ -69,14 +75,14 @@
           </div>
           <div class="help-step">
             <span class="step-num">3</span>
-            <span>Fill a row or column to clear it</span>
+            <span>Fill rows/columns to clear - blocks fall down!</span>
           </div>
           <div class="help-step">
             <span class="step-num">4</span>
-            <span>Capture the glowing letters you need!</span>
+            <span>Capture glowing letters to reveal the word</span>
           </div>
         </div>
-        <p class="help-tip">Clear multiple lines at once for combo bonuses!</p>
+        <p class="help-tip">Falling blocks can create chain reactions for bonus points!</p>
         <button class="modal-btn" id="help-close-btn">Let's Play!</button>
       </div>
     </div>
