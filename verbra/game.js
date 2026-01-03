@@ -90,7 +90,6 @@ const neededLettersEl = document.getElementById('needed-letters');
 const progressFill = document.getElementById('progress-fill');
 const captureContainer = document.getElementById('capture-container');
 const particlesContainer = document.getElementById('particles-container');
-const confettiCanvas = document.getElementById('confetti-canvas');
 const modal = document.getElementById('modal');
 const modalTitle = document.getElementById('modal-title');
 const modalMessage = document.getElementById('modal-message');
@@ -103,72 +102,44 @@ const scoreEl = document.getElementById('score');
 const movesEl = document.getElementById('moves');
 const levelEl = document.getElementById('level');
 
-// Confetti system
-const confettiCtx = confettiCanvas.getContext('2d');
-let confettiPieces = [];
-let confettiAnimating = false;
+// Victory burst effect
+function createVictoryBurst(word) {
+  // Flash overlay
+  const flash = document.createElement('div');
+  flash.className = 'victory-flash';
+  document.body.appendChild(flash);
+  setTimeout(() => flash.remove(), 400);
 
-function resizeConfetti() {
-  confettiCanvas.width = window.innerWidth;
-  confettiCanvas.height = window.innerHeight;
-}
-resizeConfetti();
-window.addEventListener('resize', resizeConfetti);
+  // Expanding rings
+  const overlay = document.createElement('div');
+  overlay.className = 'victory-overlay';
 
-function createConfetti() {
-  confettiPieces = [];
-  const colors = ['#a855f7', '#6366f1', '#3b82f6', '#ec4899', '#f59e0b', '#10b981'];
-
-  for (let i = 0; i < 150; i++) {
-    confettiPieces.push({
-      x: Math.random() * confettiCanvas.width,
-      y: -20 - Math.random() * 100,
-      w: 8 + Math.random() * 8,
-      h: 6 + Math.random() * 6,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      rotation: Math.random() * 360,
-      rotationSpeed: (Math.random() - 0.5) * 10,
-      velocityX: (Math.random() - 0.5) * 4,
-      velocityY: 2 + Math.random() * 4,
-      swing: Math.random() * Math.PI * 2
-    });
+  for (let i = 0; i < 3; i++) {
+    const ring = document.createElement('div');
+    ring.className = 'victory-ring';
+    overlay.appendChild(ring);
   }
 
-  confettiAnimating = true;
-  animateConfetti();
-}
+  document.body.appendChild(overlay);
 
-function animateConfetti() {
-  if (!confettiAnimating) return;
+  // Word reveal
+  const wordEl = document.createElement('div');
+  wordEl.className = 'victory-word';
+  wordEl.textContent = word;
+  document.body.appendChild(wordEl);
 
-  confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
-
-  let stillActive = false;
-
-  confettiPieces.forEach(p => {
-    p.y += p.velocityY;
-    p.x += p.velocityX + Math.sin(p.swing) * 0.5;
-    p.rotation += p.rotationSpeed;
-    p.swing += 0.05;
-
-    if (p.y < confettiCanvas.height + 50) {
-      stillActive = true;
-
-      confettiCtx.save();
-      confettiCtx.translate(p.x, p.y);
-      confettiCtx.rotate(p.rotation * Math.PI / 180);
-      confettiCtx.fillStyle = p.color;
-      confettiCtx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-      confettiCtx.restore();
-    }
-  });
-
-  if (stillActive) {
-    requestAnimationFrame(animateConfetti);
-  } else {
-    confettiAnimating = false;
-    confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+  // Create burst particles from center
+  const centerX = window.innerWidth / 2;
+  const centerY = window.innerHeight / 2;
+  for (let i = 0; i < 16; i++) {
+    createParticles(centerX, centerY, 1, '#ff6b4a');
   }
+
+  // Cleanup
+  setTimeout(() => {
+    overlay.remove();
+    wordEl.remove();
+  }, 1200);
 }
 
 // Particle effects
@@ -1111,7 +1082,7 @@ function checkGameOver() {
 }
 
 function showWin() {
-  createConfetti();
+  createVictoryBurst(gameState.mysteryWord);
   if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
 
   // Add round score to total and advance level

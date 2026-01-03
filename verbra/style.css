@@ -178,7 +178,7 @@ header h1 {
 .mystery-letter {
   width: 36px;
   height: 44px;
-  border: 2px solid var(--border);
+  border: 2px solid var(--accent);
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -186,13 +186,14 @@ header h1 {
   font-size: 1.4rem;
   font-weight: 700;
   text-transform: uppercase;
-  background: #fff;
+  background: var(--accent-light);
+  color: var(--accent);
   transition: all 0.3s ease;
 }
 
 .mystery-letter.captured {
-  background: var(--text);
-  border-color: var(--text);
+  background: var(--accent);
+  border-color: var(--accent);
   color: #fff;
   animation: capture-pop 0.4s ease;
 }
@@ -204,8 +205,8 @@ header h1 {
 }
 
 .mystery-letter.needed {
-  border-color: var(--accent);
   border-style: dashed;
+  background: transparent;
 }
 
 .needed-letters {
@@ -450,8 +451,8 @@ header h1 {
   pointer-events: none;
 }
 
-/* Confetti Canvas */
-.confetti-canvas {
+/* Victory Burst */
+.victory-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -459,6 +460,82 @@ header h1 {
   height: 100%;
   pointer-events: none;
   z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.victory-ring {
+  position: absolute;
+  border: 3px solid var(--accent);
+  border-radius: 50%;
+  opacity: 0;
+  animation: ring-expand 0.8s ease-out forwards;
+}
+
+.victory-ring:nth-child(1) { animation-delay: 0s; }
+.victory-ring:nth-child(2) { animation-delay: 0.1s; }
+.victory-ring:nth-child(3) { animation-delay: 0.2s; }
+
+@keyframes ring-expand {
+  0% {
+    width: 20px;
+    height: 20px;
+    opacity: 1;
+  }
+  100% {
+    width: 400px;
+    height: 400px;
+    opacity: 0;
+  }
+}
+
+.victory-flash {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 199;
+  animation: victory-flash 0.4s ease-out forwards;
+}
+
+@keyframes victory-flash {
+  0% { opacity: 0.3; }
+  100% { opacity: 0; }
+}
+
+.victory-word {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 2.5rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: var(--accent);
+  text-transform: uppercase;
+  z-index: 201;
+  opacity: 0;
+  animation: word-reveal 0.6s ease-out 0.2s forwards;
+}
+
+@keyframes word-reveal {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1) translateY(-20px);
+  }
 }
 
 /* Flash Messages */

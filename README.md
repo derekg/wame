@@ -22,10 +22,12 @@ A satisfying block puzzle game combined with word discovery.
 
 **Features:**
 - Touch-optimized drag and drop with floating preview
-- Purple gradient theme with smooth animations
+- Minimal Mono theme with coral accents
+- Progressive difficulty with level system
+- Move limit and gravity mechanics with chain reactions
 - Combo system for clearing multiple lines at once
 - Streak bonuses for consecutive clears
-- Particle effects and confetti celebrations
+- Clean victory burst animation
 - 500+ mystery words ranging from 5-7 letters
 - Haptic feedback on supported devices
 
