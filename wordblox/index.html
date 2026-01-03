@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Wordblox</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="game-container">
+    <header>
+      <h1>WORDBLOX</h1>
+      <button class="help-btn" id="help-btn">?</button>
+    </header>
+
+    <!-- Mystery Word Display -->
+    <div class="mystery-section">
+      <div class="progress-bar" id="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="mystery-word" id="mystery-word"></div>
+      <div class="needed-letters" id="needed-letters"></div>
+    </div>
+
+    <!-- Game Board -->
+    <div class="board-section">
+      <div class="game-board" id="game-board"></div>
+    </div>
+
+    <!-- Piece Tray -->
+    <div class="tray-section">
+      <div class="tray-hint">Tap piece to rotate</div>
+      <div class="piece-tray" id="piece-tray"></div>
+    </div>
+
+    <!-- Effects containers -->
+    <div class="capture-container" id="capture-container"></div>
+    <div class="particles-container" id="particles-container"></div>
+    <canvas class="confetti-canvas" id="confetti-canvas"></canvas>
+
+    <!-- Modal -->
+    <div class="modal" id="modal">
+      <div class="modal-content">
+        <h2 id="modal-title">You Won!</h2>
+        <p id="modal-message"></p>
+        <div class="modal-stats" id="modal-stats"></div>
+        <button class="modal-btn" id="modal-btn">Play Again</button>
+      </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div class="modal" id="help-modal">
+      <div class="modal-content help-content">
+        <h2>How to Play</h2>
+        <div class="help-steps">
+          <div class="help-step">
+            <span class="step-num">1</span>
+            <span>Drag blocks onto the grid</span>
+          </div>
+          <div class="help-step">
+            <span class="step-num">2</span>
+            <span>Tap a piece to rotate it</span>
+          </div>
+          <div class="help-step">
+            <span class="step-num">3</span>
+            <span>Fill a row or column to clear it</span>
+          </div>
+          <div class="help-step">
+            <span class="step-num">4</span>
+            <span>Capture the glowing letters you need!</span>
+          </div>
+        </div>
+        <p class="help-tip">Clear multiple lines at once for combo bonuses!</p>
+        <button class="modal-btn" id="help-close-btn">Let's Play!</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="words.js"></script>
+  <script src="pieces.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
