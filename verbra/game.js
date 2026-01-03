@@ -474,8 +474,32 @@ function endDrag(e) {
   const startRow = row - Math.floor(draggedPiece.piece.height / 2);
   const startCol = col - Math.floor(draggedPiece.piece.width / 2);
 
-  // Only place if actually dragged (not just a tap)
-  if (dragDuration > 150 && canPlacePiece(draggedPiece.piece, startRow, startCol)) {
+  // Check if this was a tap (not a drag)
+  if (dragDuration <= 150) {
+    // It's a tap - handle selection/rotation
+    const pieceIndex = draggedPiece.index;
+
+    // Clean up drag state first
+    if (dragGhost) {
+      dragGhost.remove();
+      dragGhost = null;
+    }
+    const pieceEl = trayEl.querySelector(`[data-index="${draggedPiece.index}"]`);
+    if (pieceEl) pieceEl.classList.remove('dragging');
+    draggedPiece = null;
+
+    document.removeEventListener('mousemove', onDrag);
+    document.removeEventListener('mouseup', endDrag);
+    document.removeEventListener('touchmove', onDrag);
+    document.removeEventListener('touchend', endDrag);
+
+    // Now handle the tap
+    handlePieceTap(pieceIndex);
+    return;
+  }
+
+  // It's a drag - try to place the piece
+  if (canPlacePiece(draggedPiece.piece, startRow, startCol)) {
     placePiece(draggedPiece.piece, startRow, startCol, draggedPiece.index);
     gameState.selectedPieceIndex = null;
   }
