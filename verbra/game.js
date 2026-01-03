@@ -67,6 +67,7 @@ const gameState = {
   grid: [],
   mysteryWord: '',
   captured: [],
+  revealed: [],  // Which letter positions have been revealed
   pieces: [],
   gameOver: false,
   won: false,
@@ -188,7 +189,16 @@ function initGame(continueLevel = false) {
   gameState.mysteryWord = getWordForLevel(gameState.difficulty).toUpperCase();
   gameState.captured = Array(gameState.mysteryWord.length).fill(false);
 
+  // Levels 1-2: all letters revealed (training)
+  // Levels 3+: letters hidden until captured
+  if (gameState.level <= 2) {
+    gameState.revealed = Array(gameState.mysteryWord.length).fill(true);
+  } else {
+    gameState.revealed = Array(gameState.mysteryWord.length).fill(false);
+  }
+
   setMysteryWord(gameState.mysteryWord);
+  updateNeededLetters(gameState.captured, gameState.revealed);
 
   gameState.grid = Array(GRID_SIZE).fill(null).map(() =>
     Array(GRID_SIZE).fill(null).map(() => ({ letter: null, filled: false }))
@@ -240,21 +250,31 @@ function renderMysteryWord() {
     letterEl.id = `mystery-${i}`;
 
     if (gameState.captured[i]) {
+      // Captured: show letter with captured style
       letterEl.classList.add('captured');
       letterEl.textContent = gameState.mysteryWord[i];
-    } else {
+    } else if (gameState.revealed[i]) {
+      // Revealed but not captured: show letter, mark as needed
       letterEl.classList.add('needed');
+      letterEl.textContent = gameState.mysteryWord[i];
+    } else {
+      // Not revealed: show ?
+      letterEl.classList.add('hidden');
+      letterEl.textContent = '?';
     }
 
     mysteryWordEl.appendChild(letterEl);
   }
 
-  // Show needed letters
+  // Show needed letters (only revealed ones)
   const needed = getNeededLettersArray();
-  if (needed.length > 0 && needed.length < gameState.mysteryWord.length) {
+  const revealedCount = gameState.revealed.filter(r => r).length;
+
+  if (revealedCount === 0) {
+    // Nothing revealed yet - show word length hint
+    neededLettersEl.innerHTML = `<span>${gameState.mysteryWord.length} letters</span>`;
+  } else if (needed.length > 0) {
     neededLettersEl.innerHTML = 'Need: ' + needed.map(l => `<span>${l}</span>`).join('');
-  } else if (needed.length === 0) {
-    neededLettersEl.innerHTML = '';
   } else {
     neededLettersEl.innerHTML = '';
   }
@@ -782,14 +802,21 @@ function checkLines() {
       setTimeout(() => boardEl.classList.remove('shake'), 400);
     }
 
-    // Find captures
+    // Find captures and reveal matching letters
     const lettersToCapture = [];
     clearedLetters.forEach(({ letter, cell }) => {
+      let foundMatch = false;
       for (let i = 0; i < gameState.mysteryWord.length; i++) {
-        if (!gameState.captured[i] && gameState.mysteryWord[i] === letter) {
-          if (!lettersToCapture.some(c => c.slotIndex === i)) {
-            lettersToCapture.push({ letter, cell, slotIndex: i });
-            break;
+        if (gameState.mysteryWord[i] === letter) {
+          // Reveal ALL positions where this letter appears
+          gameState.revealed[i] = true;
+
+          // Capture the first uncaptured position
+          if (!foundMatch && !gameState.captured[i]) {
+            if (!lettersToCapture.some(c => c.slotIndex === i)) {
+              lettersToCapture.push({ letter, cell, slotIndex: i });
+              foundMatch = true;
+            }
           }
         }
       }
@@ -839,7 +866,7 @@ function checkLines() {
       lettersToCapture.forEach(({ slotIndex }) => {
         gameState.captured[slotIndex] = true;
       });
-      updateNeededLetters(gameState.captured);
+      updateNeededLetters(gameState.captured, gameState.revealed);
 
       // Apply gravity - blocks fall down
       const blocksMoved = applyGravity();
@@ -921,14 +948,21 @@ function checkChainReaction() {
     }
   });
 
-  // Find captures
+  // Find captures and reveal matching letters
   const lettersToCapture = [];
   clearedLetters.forEach(({ letter, cell }) => {
+    let foundMatch = false;
     for (let i = 0; i < gameState.mysteryWord.length; i++) {
-      if (!gameState.captured[i] && gameState.mysteryWord[i] === letter) {
-        if (!lettersToCapture.some(c => c.slotIndex === i)) {
-          lettersToCapture.push({ letter, cell, slotIndex: i });
-          break;
+      if (gameState.mysteryWord[i] === letter) {
+        // Reveal ALL positions where this letter appears
+        gameState.revealed[i] = true;
+
+        // Capture the first uncaptured position
+        if (!foundMatch && !gameState.captured[i]) {
+          if (!lettersToCapture.some(c => c.slotIndex === i)) {
+            lettersToCapture.push({ letter, cell, slotIndex: i });
+            foundMatch = true;
+          }
         }
       }
     }
@@ -973,7 +1007,7 @@ function checkChainReaction() {
     lettersToCapture.forEach(({ slotIndex }) => {
       gameState.captured[slotIndex] = true;
     });
-    updateNeededLetters(gameState.captured);
+    updateNeededLetters(gameState.captured, gameState.revealed);
 
     // Apply gravity again
     const blocksMoved = applyGravity();

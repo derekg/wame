@@ -70,10 +70,14 @@ function setLetterBias(bias) {
   currentLetterBias = bias;
 }
 
-function updateNeededLetters(captured) {
+function updateNeededLetters(captured, revealed = null) {
   const still = [];
   for (let i = 0; i < currentMysteryWord.length; i++) {
-    if (!captured[i]) still.push(currentMysteryWord[i]);
+    // Only include letters that are revealed (or if no revealed array, include all uncaptured)
+    const isRevealed = revealed === null || revealed[i];
+    if (!captured[i] && isRevealed) {
+      still.push(currentMysteryWord[i]);
+    }
   }
   neededLetters = [...new Set(still)];
 }

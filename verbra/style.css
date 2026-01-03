@@ -209,6 +209,14 @@ header h1 {
   background: transparent;
 }
 
+.mystery-letter.hidden {
+  background: var(--cell-bg);
+  border-color: var(--border);
+  border-style: solid;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+}
+
 .needed-letters {
   font-size: 0.75rem;
   color: var(--text-muted);
