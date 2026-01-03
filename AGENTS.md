@@ -1,6 +1,6 @@
 # WAME - Word + Game Collection
 
-A collection of casual word puzzle games built with pure HTML/CSS/JS. Mobile-first, no frameworks, no build tools.
+A casual word puzzle game built with pure HTML/CSS/JS. Mobile-first, no frameworks, no build tools.
 
 ## Project Structure
 
@@ -13,10 +13,8 @@ wame/
 │   ├── pieces.js    # Tetromino piece definitions
 │   └── words.js     # Word dictionary
 │
-├── wordblox/        # Original version (same as Verbra)
-│   └── ...
-│
-└── AGENTS.md        # This file
+├── AGENTS.md        # This file
+└── README.md        # Project readme
 ```
 
 ## Tech Stack
@@ -27,7 +25,7 @@ wame/
 
 ## Games
 
-### Verbra (Primary Game)
+### Verbra
 A block puzzle game combined with word collection.
 
 **Gameplay:**
@@ -59,7 +57,9 @@ const gameState = {
   selectedPieceIndex: null,
   gameOver: false,
   won: false,
-  linesCleared: 0
+  linesCleared: 0,
+  score: 0,              // Current score
+  streak: 0              // Consecutive turns with line clears
 };
 ```
 
