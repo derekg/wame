@@ -41,31 +41,16 @@ body {
   position: fixed;
   pointer-events: none;
   z-index: 1000;
-  opacity: 0.95;
-  transform: translate(-50%, -50%) scale(1.15);
-  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.3));
-  will-change: transform, left, top;
-  /* Prevent any touch events from being captured */
+  opacity: 0.9;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25));
   touch-action: none;
 }
 
 .drag-ghost .piece-cell {
-  width: 36px;
-  height: 36px;
-  font-size: 1rem;
-}
-
-/* Larger drag ghost on touch devices */
-@media (pointer: coarse) {
-  .drag-ghost {
-    transform: translate(-50%, -50%) scale(1.25);
-  }
-
-  .drag-ghost .piece-cell {
-    width: 40px;
-    height: 40px;
-    font-size: 1.1rem;
-  }
+  width: 32px;
+  height: 32px;
+  font-size: 0.9rem;
 }
 
 .game-container {
@@ -308,13 +293,6 @@ header h1 {
   -webkit-touch-callout: none;
 }
 
-/* Touch feedback on cells */
-@media (pointer: coarse) {
-  .cell:active:not(.filled) {
-    background: rgba(26, 26, 26, 0.15);
-    transform: scale(0.95);
-  }
-}
 
 .cell.filled {
   background: var(--piece-bg);
@@ -407,14 +385,6 @@ header h1 {
 
 .piece:active {
   cursor: grabbing;
-}
-
-/* Touch-specific active state */
-@media (pointer: coarse) {
-  .piece:active {
-    transform: scale(1.02);
-    background: var(--accent-light);
-  }
 }
 
 .piece.selected {
