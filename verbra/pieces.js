@@ -59,10 +59,15 @@ const PIECE_POOL = createPiecePool();
 // Mystery word tracking
 let currentMysteryWord = '';
 let neededLetters = [];
+let currentLetterBias = 0.45; // Default, updated by game
 
 function setMysteryWord(word) {
   currentMysteryWord = word.toUpperCase();
   neededLetters = [...new Set(currentMysteryWord.split(''))]; // Unique letters needed
+}
+
+function setLetterBias(bias) {
+  currentLetterBias = bias;
 }
 
 function updateNeededLetters(captured) {
@@ -78,8 +83,8 @@ function getNeededLettersArray() {
 }
 
 function getRandomLetter() {
-  // 45% chance for mystery word letters
-  if (neededLetters.length > 0 && Math.random() < 0.45) {
+  // Chance for mystery word letters based on current difficulty
+  if (neededLetters.length > 0 && Math.random() < currentLetterBias) {
     return neededLetters[Math.floor(Math.random() * neededLetters.length)];
   }
   return BASE_LETTER_POOL[Math.floor(Math.random() * BASE_LETTER_POOL.length)];
@@ -89,7 +94,25 @@ function isLetterNeeded(letter) {
   return neededLetters.includes(letter.toUpperCase());
 }
 
+let currentBigPieceBias = 0; // 0 = normal, 0.5 = 50% more likely big pieces
+
+function setBigPieceBias(bias) {
+  currentBigPieceBias = bias;
+}
+
+// Big pieces (4 cells)
+const BIG_PIECES = ['I4', 'O', 'T', 'S', 'Z', 'L', 'J'];
+// Small pieces (1-3 cells)
+const SMALL_PIECES = ['I3', 'L3', 'I2', 'DOT'];
+
 function getRandomPieceShape() {
+  // Apply big piece bias
+  if (currentBigPieceBias > 0 && Math.random() < currentBigPieceBias) {
+    const shapeName = BIG_PIECES[Math.floor(Math.random() * BIG_PIECES.length)];
+    return { name: shapeName, ...PIECE_SHAPES[shapeName] };
+  }
+
+  // Normal weighted selection
   const shapeName = PIECE_POOL[Math.floor(Math.random() * PIECE_POOL.length)];
   return { name: shapeName, ...PIECE_SHAPES[shapeName] };
 }

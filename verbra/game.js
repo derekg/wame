@@ -1,6 +1,66 @@
 // Game Configuration
 const GRID_SIZE = 6;
 const FIRST_PLAY_KEY = 'verbra_played';
+const LEVEL_KEY = 'verbra_level';
+const HIGH_SCORE_KEY = 'verbra_high_score';
+
+// Difficulty settings per level
+function getDifficultySettings(level) {
+  // Level 1 is easy, gets harder each level, caps at level 10
+  const cappedLevel = Math.min(level, 10);
+
+  return {
+    // Letter bias: 50% at level 1, down to 20% at level 10
+    letterBias: 0.50 - (cappedLevel - 1) * 0.033,
+
+    // Moves: generous at start, tighter at higher levels
+    // Level 1: +5 bonus moves, Level 10: -3 moves
+    moveBonus: 6 - cappedLevel,
+
+    // Prefer unique letter words at higher levels
+    // Level 1: allow up to 3 repeated letters, Level 10: max 1 repeat
+    maxRepeatedLetters: Math.max(1, 4 - Math.floor(cappedLevel / 3)),
+
+    // Minimum word length increases with level
+    minWordLength: cappedLevel <= 3 ? 5 : (cappedLevel <= 6 ? 6 : 7),
+
+    // Piece size bias: higher = more big pieces
+    // Level 1: 0 (normal), Level 10: 0.5 (50% more likely to get big pieces)
+    bigPieceBias: (cappedLevel - 1) * 0.05
+  };
+}
+
+// Count repeated letters in a word
+function countRepeatedLetters(word) {
+  const letterCounts = {};
+  for (const letter of word.toUpperCase()) {
+    letterCounts[letter] = (letterCounts[letter] || 0) + 1;
+  }
+  // Count how many letters appear more than once
+  return Object.values(letterCounts).filter(count => count > 1).reduce((sum, count) => sum + (count - 1), 0);
+}
+
+// Get a word appropriate for the current difficulty
+function getWordForLevel(difficulty) {
+  const validWords = MYSTERY_WORDS.filter(word => {
+    // Check length
+    if (word.length < difficulty.minWordLength) return false;
+
+    // Check repeated letters
+    const repeats = countRepeatedLetters(word);
+    if (repeats > difficulty.maxRepeatedLetters) return false;
+
+    return true;
+  });
+
+  // If no words match (shouldn't happen), fall back to any word of minimum length
+  if (validWords.length === 0) {
+    const fallback = MYSTERY_WORDS.filter(w => w.length >= difficulty.minWordLength);
+    return fallback[Math.floor(Math.random() * fallback.length)];
+  }
+
+  return validWords[Math.floor(Math.random() * validWords.length)];
+}
 
 // Game State
 const gameState = {
@@ -16,7 +76,10 @@ const gameState = {
   score: 0,
   streak: 0,  // Consecutive line clears
   movesRemaining: 0,
-  maxMoves: 0
+  maxMoves: 0,
+  level: 1,
+  totalScore: 0,  // Cumulative score across levels
+  difficulty: null  // Current difficulty settings
 };
 
 // DOM Elements
@@ -38,6 +101,7 @@ const helpModal = document.getElementById('help-modal');
 const helpCloseBtn = document.getElementById('help-close-btn');
 const scoreEl = document.getElementById('score');
 const movesEl = document.getElementById('moves');
+const levelEl = document.getElementById('level');
 
 // Confetti system
 const confettiCtx = confettiCanvas.getContext('2d');
@@ -134,8 +198,23 @@ function createParticles(x, y, count, color) {
 }
 
 // Initialize the game
-function initGame() {
-  gameState.mysteryWord = MYSTERY_WORDS[Math.floor(Math.random() * MYSTERY_WORDS.length)].toUpperCase();
+function initGame(continueLevel = false) {
+  // Load or initialize level
+  if (!continueLevel) {
+    const savedLevel = localStorage.getItem(LEVEL_KEY);
+    gameState.level = savedLevel ? parseInt(savedLevel) : 1;
+    gameState.totalScore = 0;
+  }
+
+  // Get difficulty settings for current level
+  gameState.difficulty = getDifficultySettings(gameState.level);
+
+  // Apply difficulty settings to piece generation
+  setLetterBias(gameState.difficulty.letterBias);
+  setBigPieceBias(gameState.difficulty.bigPieceBias);
+
+  // Pick a word appropriate for this level
+  gameState.mysteryWord = getWordForLevel(gameState.difficulty).toUpperCase();
   gameState.captured = Array(gameState.mysteryWord.length).fill(false);
 
   setMysteryWord(gameState.mysteryWord);
@@ -153,11 +232,14 @@ function initGame() {
   gameState.score = 0;
   gameState.streak = 0;
 
-  // Set moves based on word length: 5 letters = 20 moves, 6 = 23, 7 = 26
-  gameState.maxMoves = 17 + (gameState.mysteryWord.length * 1);
+  // Set moves based on word length + difficulty bonus
+  const baseMoves = 15 + gameState.mysteryWord.length;
+  gameState.maxMoves = baseMoves + gameState.difficulty.moveBonus;
   gameState.movesRemaining = gameState.maxMoves;
 
-  scoreEl.textContent = '0';
+  // Update UI
+  levelEl.textContent = gameState.level;
+  scoreEl.textContent = gameState.totalScore;
   updateMovesDisplay();
 
   renderBoard();
@@ -174,7 +256,7 @@ function initGame() {
     }, 300);
   }
 
-  console.log('Mystery word:', gameState.mysteryWord);
+  console.log(`Level ${gameState.level}: "${gameState.mysteryWord}" (${gameState.maxMoves} moves, ${Math.round(gameState.difficulty.letterBias * 100)}% letter bias)`);
 }
 
 // Render mystery word
@@ -215,7 +297,7 @@ function updateProgress() {
 
 function addScore(points) {
   gameState.score += points;
-  scoreEl.textContent = gameState.score;
+  scoreEl.textContent = gameState.totalScore + gameState.score;
   scoreEl.classList.add('bump');
   setTimeout(() => scoreEl.classList.remove('bump'), 300);
 }
@@ -1032,50 +1114,87 @@ function showWin() {
   createConfetti();
   if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
 
-  modalTitle.textContent = 'Amazing!';
-  modalMessage.textContent = `You found the word!`;
+  // Add round score to total and advance level
+  gameState.totalScore += gameState.score;
+  gameState.level++;
+
+  // Save progress
+  localStorage.setItem(LEVEL_KEY, gameState.level.toString());
+
+  // Check for high score
+  const highScore = parseInt(localStorage.getItem(HIGH_SCORE_KEY) || '0');
+  const isHighScore = gameState.totalScore > highScore;
+  if (isHighScore) {
+    localStorage.setItem(HIGH_SCORE_KEY, gameState.totalScore.toString());
+  }
+
+  modalTitle.textContent = 'Level Complete!';
+  modalMessage.textContent = isHighScore ? `New high score!` : `You found "${gameState.mysteryWord}"!`;
   modalStats.innerHTML = `
     <div class="modal-stat">
-      <div class="modal-stat-value">${gameState.mysteryWord}</div>
-      <div class="modal-stat-label">Word</div>
+      <div class="modal-stat-value">${gameState.level}</div>
+      <div class="modal-stat-label">Next Level</div>
     </div>
     <div class="modal-stat">
-      <div class="modal-stat-value">${gameState.score}</div>
-      <div class="modal-stat-label">Score</div>
+      <div class="modal-stat-value">${gameState.totalScore}</div>
+      <div class="modal-stat-label">Total Score</div>
     </div>
     <div class="modal-stat">
-      <div class="modal-stat-value">${gameState.linesCleared}</div>
-      <div class="modal-stat-label">Lines</div>
+      <div class="modal-stat-value">+${gameState.score}</div>
+      <div class="modal-stat-label">This Round</div>
     </div>
   `;
+  modalBtn.textContent = 'Next Level';
+  modalBtn.onclick = () => {
+    initGame(true); // Continue with current level
+    modalBtn.textContent = 'Play Again';
+    modalBtn.onclick = () => initGame();
+  };
   showModal();
 }
 
 function showLose(reason = 'no_space') {
   const found = gameState.captured.filter(c => c).length;
 
+  // Add final round score to total
+  gameState.totalScore += gameState.score;
+
+  // Check for high score
+  const highScore = parseInt(localStorage.getItem(HIGH_SCORE_KEY) || '0');
+  const isHighScore = gameState.totalScore > highScore;
+  if (isHighScore) {
+    localStorage.setItem(HIGH_SCORE_KEY, gameState.totalScore.toString());
+  }
+
+  // Reset level for next game
+  localStorage.setItem(LEVEL_KEY, '1');
+
   if (reason === 'out_of_moves') {
     modalTitle.textContent = 'Out of Moves!';
-    modalMessage.textContent = `The word was "${gameState.mysteryWord}"`;
   } else {
     modalTitle.textContent = 'No Space Left!';
-    modalMessage.textContent = `The word was "${gameState.mysteryWord}"`;
   }
+
+  modalMessage.textContent = isHighScore
+    ? `New high score! The word was "${gameState.mysteryWord}"`
+    : `The word was "${gameState.mysteryWord}"`;
 
   modalStats.innerHTML = `
     <div class="modal-stat">
-      <div class="modal-stat-value">${found}/${gameState.mysteryWord.length}</div>
-      <div class="modal-stat-label">Letters</div>
+      <div class="modal-stat-value">${gameState.level}</div>
+      <div class="modal-stat-label">Level</div>
     </div>
     <div class="modal-stat">
-      <div class="modal-stat-value">${gameState.score}</div>
-      <div class="modal-stat-label">Score</div>
+      <div class="modal-stat-value">${gameState.totalScore}</div>
+      <div class="modal-stat-label">Final Score</div>
     </div>
     <div class="modal-stat">
-      <div class="modal-stat-value">${gameState.linesCleared}</div>
-      <div class="modal-stat-label">Lines</div>
+      <div class="modal-stat-value">${highScore}</div>
+      <div class="modal-stat-label">Best</div>
     </div>
   `;
+  modalBtn.textContent = 'Try Again';
+  modalBtn.onclick = () => initGame();
   showModal();
 }
 
